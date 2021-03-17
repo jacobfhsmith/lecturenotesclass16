@@ -1,0 +1,371 @@
+---
+title: "CLT-based inference - hypothesis testing"
+author: ""
+date: ""
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      comment = "#>", highlight = TRUE,
+                      fig.align = "center")
+```
+
+## Upcoming Deadlines
+
+- Lab 7 on Thursday (due on Saturday by 11:59 PM)
+- HW 4 assigned on Thursday (due next Thursday the 25th by 11:59 PM)
+- Proposals for project due on Monday by 11:59 PM
+
+## Main ideas
+
+- Understand the CLT and how to use the result
+
+- Perform statistical hypothesis tests using `base` R and `infer`
+
+# Packages
+
+```{r packages}
+library(tidyverse)
+library(infer)
+library(patchwork)
+```
+
+# Recall
+
+## The Central Limit Theorem
+
+For a population with a well-defined mean $\mu$ and standard deviation $\sigma$, these three properties hold for the distribution of sample average $\bar{X}$, assuming certain conditions hold:
+
+1. The mean of the sampling distribution is identical to the population mean
+$\mu$,
+
+2. The standard deviation of the distribution of the sample averages is
+$\sigma/\sqrt{n}$, or the **standard error** (SE) of the mean, and
+
+3. For $n$ large enough (in the limit, as $n \to \infty$), the shape of the
+sampling distribution of means is approximately *normal* (Gaussian).
+
+
+## Conditions
+
+What are the conditions we need for the CLT to hold?
+
+- **Independence:** The sampled observations must be independent. This is
+  difficult to check, but the following are useful guidelines:
+    - the sample must be random
+    - if sampling without replacement, sample size must be less than 10% of the population size
+    
+- **Sample size / distribution:** 
+    - if data are numerical, usually n > 30 is considered a large enough sample, but if the underlying population distribution is extremely skewed, more might be needed
+    - if we know for sure that the underlying data are normal, then the 
+      distribution of sample averages will also be exactly normal, regardless of the sample size
+    - if data are categorical, at least 10 successes and 10 failures.
+
+## CLT results: $\bar{X}$, $\hat{p}$
+
+Assuming the conditions for the CLT hold, $\bar{X}$ approximately has the 
+following distribution:
+
+$$\mbox{Normal}\left(\mu, \sigma/\sqrt{n}\right)$$
+
+Equivalently, we can define the quantity $Z$, such that 
+$Z = \frac{\bar{X} - \mu}{\sigma/\sqrt{n}}$, where $Z$ has the following
+distribution: $$\mbox{Normal}\left(0, 1 \right)$$
+
+Assuming the conditions for the CLT hold, $\hat{p}$ approximately has the 
+following distribution:
+
+$$\mbox{Normal}\left(p, \sqrt{\frac{p(1-p)}{n}}\right)$$
+
+We can standardize this in a similar way and define a quantity $Z$ that is
+normally distributed with a mean of 0 and a standard deviation of 1.
+
+## The hypothesis testing framework
+
+1. Start with two hypotheses about the population: the null hypothesis and the alternative hypothesis.
+
+2. Choose a (representative) sample, collect data, and analyze the data.
+
+3. Figure out how likely it is to see data like what we observed, **IF** the 
+   null hypothesis were in fact true.
+
+4. If our data would have been extremely unlikely if the null claim were true, then we reject it and deem the alternative claim worthy of further study. 
+   Otherwise, we cannot reject the null claim.
+
+## The "errors"
+
+Suppose we test a certain null hypothesis, which can be either true or false 
+(we never know for sure!). We make one of two decisions given our data: either 
+reject or fail to reject $H_0$. 
+
+We have the following four scenarios:
+
+| Decision             | $H_0$ is true    | $H_0$ is false   |
+|----------------------|------------------|------------------|
+| Fail to reject $H_0$ | Correct decision | *Type II Error*  |
+| Reject $H_0$         | *Type I Error*   | Correct decision |
+
+It is important to weigh the consequences of making each type of error.
+
+# CLT-based testing
+
+## Testing comparison
+
+What changes now that we plan to use a CLT-based approach in doing our testing?
+
+We no longer have to simulate the null distribution. The Central Limit Theorem
+gives us an approximation for the distribution of our point estimate under
+the null hypothesis.
+
+Rather than work directly with the sampling distribution of the point estimates, we'll use standardized versions that we'll call **test statistics**.
+
+For tests of $\mu$:
+
+$$t = \frac{\bar{x} - \mu_0}{s/\sqrt{n}},$$
+
+where $\mu_0$ is the value of $\mu$ under the null hypothesis.
+
+For tests of $p$:
+
+$$z = \frac{\hat{p} - p_0}{\sqrt{\frac{p_0(1-p_0)}{n}}},$$
+
+where $p_0$ is the value of $p$ under the null hypothesis.
+
+## Test statistic and p-value
+
+Recall step 3 of our testing framework: Figure out how likely it is to see data 
+like what we observed, **IF** the null hypothesis were in fact true.
+
+To do this:
+
+1. Compute the test statistic's value - all information is obtained from the
+   sample data or value of the parameter under the null hypothesis.
+   
+2. To quantify how likely it is to see this test statistic value given the
+   null hypothesis is true, compute the probability of obtaining a test
+   statistic as extreme or more extreme than what we observed. This probability
+   is calculated from a known distribution.
+
+# Data
+
+In the examples and practice sections, we'll again work with a subset of data from the General Social Survey.
+
+```{r read_data}
+gss_2010 <- read_csv("~/gss_2010.csv")
+```
+
+# Notes
+
+Recall the hypothesis testing framework:
+
+1. Start with two hypotheses about the population: the null hypothesis and the alternative hypothesis.
+
+2. Choose a (representative) sample, collect data, and analyze the data.
+
+3. Figure out how likely it is to see data like what we observed, **IF** the 
+   null hypothesis were in fact true.
+
+4. If our data would have been extremely unlikely if the null claim were true, then we reject it and deem the alternative claim worthy of further study. 
+   
+   Otherwise, we cannot reject the null claim.
+   
+To do step 3, we'll need to compute probabilities from the t-distribution or
+the normal distribution. Before we compute quantiles with `qt()` and 
+`qnorm()`, to compute probabilities we'll use `pt()` and `pnorm()`.
+
+Let's first see if we can understand how these functions work.
+
+```{r base_viz, echo=FALSE}
+ggbase <- ggplot() +
+  xlim(-4, 4) +
+  labs(y = "") +
+  theme_bw()
+```
+
+```{r pnorm_1}
+pnorm(q = 1.645)
+```
+
+```{r norm_viz_1, echo=FALSE}
+ggbase +
+  stat_function(fun = dnorm, geom = "area", fill = "lightblue", 
+                xlim = c(-4, 1.645)) +
+  stat_function(fun = dnorm, color = "grey60", size = 1.5) +
+  annotate(geom = "text", x = -3, y = 0.1, label = round(pnorm(q = 1.645), 3),
+           size = 8 , color = "red")
+```
+
+```{r pnorm_2}
+pnorm(q = 2.5)
+```
+
+```{r norm_viz_2, echo=FALSE}
+ggbase +
+  stat_function(fun = dnorm, geom = "area", fill = "lightblue", 
+                xlim = c(-4, 2.5)) +
+  stat_function(fun = dnorm, color = "grey60", size = 1.5) +
+  annotate(geom = "text", x = -3, y = 0.1, label = round(pnorm(q = 2.5), 3),
+           size = 8 , color = "red")
+```
+
+```{r pnorm_3}
+pnorm(q = -1.5)
+```
+
+```{r norm_viz_3, echo=FALSE}
+ggbase +
+  stat_function(fun = dnorm, geom = "area", fill = "lightblue", 
+                xlim = c(-4, -1.5)) +
+  stat_function(fun = dnorm, color = "grey60", size = 1.5) +
+  annotate(geom = "text", x = -3, y = 0.1, label = round(pnorm(q = -1.5), 3),
+           size = 8 , color = "red")
+```
+
+What are these functions calculating?
+
+### Example: hypothesis test for $\mu$
+
+We'll work with the same data as last time.
+
+The GSS asks "After an average work day, about how many 
+hours do you have to relax or pursue activities that you enjoy?". A past
+census study found that the mean hours was 3.6. Perform a hypothesis test to
+see if this number has increased.
+
+First, we'll check out our sample data and compute some summary statistics.
+
+```{r summary_stats_example}
+hrs_relax_stats <- gss_2010 %>% 
+  filter(!is.na(hrsrelax)) %>%
+  summarise(x_bar = mean(hrsrelax), 
+            s     = sd(hrsrelax), 
+            n     = n())
+hrs_relax_stats
+```
+
+#### Direct calculation via formula
+
+Let's grab these three statistics as vectors.
+
+```{r stats_vectors_example}
+n <- hrs_relax_stats$n
+x_bar <- hrs_relax_stats$x_bar
+s <- hrs_relax_stats$s
+mu_0 <- 3.6
+```
+
+Next, we need to compute our test statistic and the corresponding p-value.
+
+```{r test_stat_mu_example}
+test_stat <- (x_bar - mu_0) / (s / sqrt(n))
+test_stat
+```
+
+The p-value is the probability of getting a test statistic value as extreme
+or more extreme than `test_stat` given the null hypothesis is true.
+
+```{r p_value_mu_viz, echo=FALSE}
+ggbase +
+  stat_function(fun = dt, args = list(df = n - 1), geom = "area", 
+                fill = "lightblue", xlim = c(test_stat, 4)) +
+  stat_function(fun = dt, args = list(df = n - 1), 
+                color = "grey60", size = 1.5) +
+  labs(caption = "The p-value is the blue shaded region.")
+```
+
+
+```{r p_value_mu_example}
+p_value <- 1 - pt(test_stat, df = n - 1)
+```
+
+Why do we have `1 - pt(test_stat, df = n - 1)`?
+
+How do we interpret this result?
+
+#### Infer
+
+The `infer` package has a function to do these calculations in one
+step. Function `t_test()` is a tidier version of the built-in R function
+`t.test()`.
+
+```{r infer_mu_example}
+t_test(gss_2010, response = hrsrelax, mu = 3.6, alternative = "greater",
+       conf_int = FALSE)
+```
+
+## Practice
+
+Redo the above analysis, but perform the test to see if this number has changed.
+Conduct your test at the $\alpha = 0.10$ significance level. Also, compute
+a 90% confidence interval. What do you notice?
+
+```{r test_mu_practice}
+```
+
+### Example: hypothesis test for $p$
+
+The GSS asks "Are you better off today than you were four years ago?". 
+Use a CLT-based approach to test if that proportion has decreased from its level four years ago of 0.33.
+
+First, we'll check the success-failure condition.
+
+```{r success_failure_check}
+gss_2010 %>% 
+  count(better)
+```
+
+We're also assuming these observations are independent.
+
+Use `infer` to do our test.
+
+```{r infer_p_example}
+gss_2010 %>% 
+  mutate(better = ifelse(better == 1, "better", "worse")) %>% 
+  prop_test(response = better, success = "better", p=0.33, conf_int = FALSE,
+            alternative = "less", z = TRUE)
+```
+
+What is your conclusion?
+
+## Practice
+
+Redo the above analysis using `base` R functions and `pnorm()`.
+
+```{r p_hat_and_n}
+
+```
+
+```{r test_stat}
+
+```
+
+```{r pnorm}
+
+```
+
+
+## Inference for other parameters
+
+While we aren't able to cover inference for every parameter, you now have the
+tools to conduct inference for other parameters such as the difference in
+means, the difference in proportions, testing if variables are independent or
+not, etc. Although the test statistics will differ, the general framework and
+concepts remain the same.
+
+In doing inference for parameters outside of what we covered, take a look at
+the `infer` examples: 
+https://infer.netlify.app/articles/observed_stat_examples.html. A
+simulation-based approach is a good strategy if you don't
+know the underlying theoretical distribution. Keep this in mind as you think
+about research questions and explore data for your project.
+
+## References
+
+1. "Infer - Tidy Statistical Inference". Infer.Netlify.App, 2021, 
+   https://infer.netlify.app/index.html.
+   
+## For Next Class
+- Please read OIS Sections 8.1 and 8.2
